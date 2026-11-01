@@ -19,22 +19,23 @@ const photoWood = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUEBA
 const texture=new THREE.TextureLoader().load(photoWood);
 texture.colorSpace=THREE.SRGBColorSpace;
 texture.wrapS=texture.wrapT=THREE.RepeatWrapping;
-texture.repeat.set(1.45,1.45);
+texture.repeat.set(1,1);
 texture.anisotropy=renderer.capabilities.getMaxAnisotropy();
-// The photographed wood also drives a separate, luminance-derived microsurface map.
-const tableMat=new THREE.MeshPhysicalMaterial({map:texture,bumpMap:texture,bumpScale:.021,roughness:.55,metalness:0,clearcoat:.36,clearcoatRoughness:.28,envMapIntensity:.85});
-const grainCanvas=document.createElement('canvas');grainCanvas.width=512;grainCanvas.height=512;
-function makeGrainMap(){
- const im=texture.image;if(!im||!im.width)return;
- const c=grainCanvas.getContext('2d',{willReadFrequently:true});c.drawImage(im,0,0,512,512);
- const id=c.getImageData(0,0,512,512),p=id.data;
- for(let i=0;i<p.length;i+=4){const lum=.2126*p[i]+.7152*p[i+1]+.0722*p[i+2];const v=Math.max(35,Math.min(235,145+(lum-100)*.78));p[i]=p[i+1]=p[i+2]=v;}
- c.putImageData(id,0,0);const grain=new THREE.CanvasTexture(grainCanvas);grain.wrapS=grain.wrapT=THREE.RepeatWrapping;grain.repeat.copy(texture.repeat);grain.anisotropy=texture.anisotropy;grain.colorSpace=THREE.NoColorSpace;
- tableMat.roughnessMap=grain;tableMat.bumpMap=grain;tableMat.bumpScale=.024;tableMat.needsUpdate=true;
-}
-if(texture.image?.width)makeGrainMap();else texture.addEventListener('update',makeGrainMap);
-
-const table=new THREE.Mesh(new THREE.PlaneGeometry(200,200),tableMat);table.rotation.x=-Math.PI/2;table.receiveShadow=true;scene.add(table);
+// 写真テクスチャの色をそのまま表示。木目に擬似凹凸・光沢・色補正を加えない。
+const tableMat=new THREE.MeshBasicMaterial({map:texture,toneMapped:false});
+const table=new THREE.Mesh(new THREE.PlaneGeometry(200,200),tableMat);
+table.rotation.x=-Math.PI/2;
+table.receiveShadow=false;
+scene.add(table);
+// 写真自体を暗くせず、落下するサイコロの影だけを重ねる。
+const shadowReceiver=new THREE.Mesh(
+  new THREE.PlaneGeometry(200,200),
+  new THREE.ShadowMaterial({color:0x130b08,opacity:.32,depthWrite:false})
+);
+shadowReceiver.rotation.x=-Math.PI/2;
+shadowReceiver.position.y=.003;
+shadowReceiver.receiveShadow=true;
+scene.add(shadowReceiver);
 // 大きな発光パネルを環境マップに焼き込み、樹脂に柔らかな反射を映す。
 const envScene=new THREE.Scene();envScene.background=new THREE.Color('#242029');
 const panel=(w,h,color,position,rotation)=>{const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({color,side:THREE.DoubleSide}));m.position.set(...position);m.rotation.set(...rotation);envScene.add(m)};
