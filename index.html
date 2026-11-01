@@ -1,0 +1,90 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>リアル3Dサイコロ | フォトリアル改良版</title><style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,'Noto Sans JP',sans-serif}*{box-sizing:border-box}body{margin:0;background:#17191f;color:#fff;overflow:hidden}#scene{position:fixed;inset:0;width:100%;height:100%;display:block}#shade{position:fixed;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(8,12,20,.54),transparent 24%,transparent 67%,rgba(10,10,13,.65))}header{position:fixed;top:env(safe-area-inset-top);left:0;right:0;padding:22px 22px 0;display:flex;align-items:flex-start;justify-content:space-between;pointer-events:none}h1{margin:0;font-size:clamp(19px,3.5vw,26px);letter-spacing:.04em;text-shadow:0 2px 10px #0009}header p{margin:5px 0;color:#e7dcd0;font-size:12px}#status{padding:8px 13px;border-radius:30px;background:#0007;border:1px solid #fff3;font-size:12px;backdrop-filter:blur(8px)}footer{position:fixed;bottom:calc(18px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);width:min(94vw,760px);display:flex;gap:12px;align-items:center;justify-content:center;padding:14px;border:1px solid #fff4;background:#1c1716b8;backdrop-filter:blur(20px);border-radius:23px;box-shadow:0 16px 50px #0007}.qty{display:flex;align-items:center;gap:9px;background:#ffffff14;border-radius:15px;padding:7px}.qty button,.secondary{background:#ffffff20;border:1px solid #ffffff24;color:#fff;border-radius:11px;min-width:40px;height:44px;font-size:22px;cursor:pointer}.qty b{min-width:20px;text-align:center}.qty small{display:block;position:absolute;transform:translateY(-36px);font-size:11px;color:#ddd}.roll{flex:1;border:0;border-radius:15px;background:linear-gradient(135deg,#ff514b,#d9282c);color:#fff;font-weight:800;font-size:clamp(15px,2.8vw,20px);padding:17px 12px;box-shadow:0 5px 18px #ff292c45;cursor:pointer}.roll:disabled{opacity:.6;cursor:wait}.secondary{font-size:13px;padding:0 12px}.results{position:fixed;top:78px;left:22px;max-width:calc(100vw - 32px);font-size:clamp(19px,4.8vw,26px);font-weight:750;line-height:1.5;color:#fff;pointer-events:none;text-shadow:0 2px 8px #000}#history{position:fixed;right:18px;bottom:calc(105px + env(safe-area-inset-bottom));width:min(310px,90vw);max-height:42vh;overflow:auto;border:1px solid #ffffff3d;border-radius:18px;background:#191715ed;backdrop-filter:blur(16px);padding:17px;box-shadow:0 16px 45px #0008;display:none}#history h2{margin:0 0 12px;font-size:16px}#history ol{padding-left:22px;font-size:13px;line-height:2;color:#ddd}#error{position:fixed;top:42%;left:5%;width:90%;text-align:center;color:#fff;background:#581d1df0;padding:20px;border-radius:12px;display:none}button:focus-visible{outline:3px solid #fff}@media(max-width:550px){footer{gap:7px;padding:9px;border-radius:18px}.qty{gap:4px;padding:4px}.qty button{min-width:33px;height:42px}.secondary{padding:0 7px;min-width:45px}.roll{padding:15px 6px}header{padding:17px 15px 0}#status{font-size:10px}.results{left:15px;top:72px}}
+</style></head><body><canvas id="scene"></canvas><div id="shade"></div><header><div><h1>🎲 REAL DICE</h1></div></header><div class="results" id="result">サイコロを振ってください</div><div id="error"></div><aside id="history"><h2>🎲 出目の履歴</h2><ol id="log"></ol></aside><footer><div class="qty"><button id="minus" aria-label="減らす">−</button><b id="count">1</b><button id="plus" aria-label="増やす">＋</button></div><button class="roll" id="roll" disabled>🎲 サイコロを振る</button><button class="secondary" id="historyBtn">履歴</button></footer>
+<script type="module">
+import * as THREE from 'https://esm.sh/three@0.170.0';
+import RAPIER from 'https://esm.sh/@dimforge/rapier3d-compat@0.15.0';
+const canvas=document.querySelector('#scene'),result=document.querySelector('#result'),rollBtn=document.querySelector('#roll');
+const error=document.querySelector('#error');
+function fail(e){console.error(e);error.style.display='block';error.textContent='3Dの処理でエラーが発生しました。詳細：'+(e?.message||'');}
+try{await RAPIER.init();}catch(e){fail(e);throw e}
+try{
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.18;
+const scene=new THREE.Scene();scene.background=new THREE.Color('#130f11');scene.fog=new THREE.Fog('#130f11',17,37);
+const camera=new THREE.PerspectiveCamera(40,1,.1,100);camera.position.set(6.2,8.2,10.6);camera.lookAt(0,.55,0);
+scene.add(new THREE.HemisphereLight(0xe5efff,0x392018,.66));const key=new THREE.DirectionalLight(0xfff1dc,3.8);key.position.set(-5,10,5);key.castShadow=true;key.shadow.mapSize.set(2048,2048);key.shadow.radius=3;key.shadow.camera.left=-10;key.shadow.camera.right=10;key.shadow.camera.top=10;key.shadow.camera.bottom=-10;key.shadow.normalBias=.02;key.shadow.bias=-.0002;scene.add(key);const rim=new THREE.DirectionalLight(0x8cbaff,1.55);rim.position.set(6,5,-5);scene.add(rim);
+const fill=new THREE.PointLight(0xffa25e,42,20);fill.position.set(-5,5,-3);scene.add(fill);
+// 高精細な木目を自動生成。写真素材を使わず、板の濃淡・導管・節を描く。
+const wood=document.createElement('canvas');wood.width=2048;wood.height=2048;
+const ctx=wood.getContext('2d');let seed=91823;
+const rnd=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296};
+const grad=ctx.createLinearGradient(0,0,0,2048);grad.addColorStop(0,'#3b1b11');grad.addColorStop(.4,'#8e4c28');grad.addColorStop(1,'#3c2015');ctx.fillStyle=grad;ctx.fillRect(0,0,2048,2048);
+for(let plank=0;plank<9;plank++){
+ const y0=plank*230-20, y1=y0+230;
+ ctx.fillStyle=`rgba(${plank%3===0?'18,7,4':'240,156,78'},${.10+rnd()*.14})`;ctx.fillRect(0,y0,2048,230);
+ ctx.fillStyle='rgba(11,5,3,.48)';ctx.fillRect(0,y1-5,2048,5);
+ ctx.fillStyle='rgba(255,191,112,.26)';ctx.fillRect(0,y1+1,2048,3);
+ for(let i=0;i<650;i++){
+  const y=y0+rnd()*230, amp=1+rnd()*9, phase=rnd()*6.28, freq=.002+rnd()*.004;
+  const light=rnd()>.54;ctx.strokeStyle=light?`rgba(255,196,119,${.04+rnd()*.18})`:`rgba(29,11,5,${.06+rnd()*.23})`;
+  ctx.lineWidth=.3+rnd()*2.7;ctx.beginPath();
+  for(let x=0;x<=2048;x+=16){const yy=y+Math.sin(x*freq+phase)*amp+Math.sin(x*.012+phase)*amp*.17;x?ctx.lineTo(x,yy):ctx.moveTo(x,yy)}ctx.stroke();
+ }
+ for(let j=0;j<2;j++){const x=100+rnd()*1850,y=y0+40+rnd()*150;ctx.save();ctx.translate(x,y);ctx.scale(1,.22);for(let r=9;r<48;r+=5){ctx.beginPath();ctx.ellipse(0,0,r*2,r,0,0,Math.PI*2);ctx.strokeStyle='rgba(36,13,6,.12)';ctx.lineWidth=2;ctx.stroke()}ctx.restore()}
+}
+const texture=new THREE.CanvasTexture(wood);texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(2.2,2.2);texture.anisotropy=renderer.capabilities.getMaxAnisotropy();
+// 木材の微細な凹凸を別のノーマルマップで表現する。木目の向きに沿う微細な導管を作る。
+const bumpCanvas=document.createElement('canvas');bumpCanvas.width=1024;bumpCanvas.height=1024;
+const bc=bumpCanvas.getContext('2d');const bumpData=bc.createImageData(1024,1024);
+for(let y=0;y<1024;y++)for(let x=0;x<1024;x++){
+ const longGrain=Math.sin(y*.72+Math.sin(x*.009)*4.2)*.26+Math.sin(y*.19+Math.sin(x*.018)*6)*.27;
+ const pores=Math.sin(y*2.8+x*.024)*.12;const noise=(rnd()-.5)*.22;
+ const h=Math.max(0,Math.min(255,Math.round(128+(longGrain+pores+noise)*60)));
+ const k=(y*1024+x)*4;bumpData.data[k]=h;bumpData.data[k+1]=h;bumpData.data[k+2]=h;bumpData.data[k+3]=255;
+}
+bc.putImageData(bumpData,0,0);
+const bumpTex=new THREE.CanvasTexture(bumpCanvas);bumpTex.wrapS=bumpTex.wrapT=THREE.RepeatWrapping;bumpTex.repeat.copy(texture.repeat);
+bumpTex.anisotropy=renderer.capabilities.getMaxAnisotropy();
+const tableMat=new THREE.MeshPhysicalMaterial({map:texture,bumpMap:bumpTex,bumpScale:.045,roughness:.27,metalness:0,clearcoat:.46,clearcoatRoughness:.19});
+const table=new THREE.Mesh(new THREE.PlaneGeometry(200,200),tableMat);table.rotation.x=-Math.PI/2;table.receiveShadow=true;scene.add(table);
+// 大きな発光パネルを環境マップに焼き込み、樹脂に柔らかな反射を映す。
+const envScene=new THREE.Scene();envScene.background=new THREE.Color('#10131b');
+const panel=(w,h,color,position,rotation)=>{const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({color,side:THREE.DoubleSide}));m.position.set(...position);m.rotation.set(...rotation);envScene.add(m)};
+panel(12,6,0xffffff,[-3,5,4],[-.45,-.4,0]);panel(3,10,0x9fcaff,[5,4,-3],[0,-.7,0]);panel(9,3,0xffe0ba,[0,7,0],[-Math.PI/2,0,0]);panel(1.2,9,0xffffff,[-6,4,-1],[0,.9,0]);
+const pmrem=new THREE.PMREMGenerator(renderer);const envTarget=pmrem.fromScene(envScene,.08);scene.environment=envTarget.texture;pmrem.dispose();
+const world=new RAPIER.World({x:0,y:-15,z:0});world.integrationParameters.maxVelocityIterations=12;world.integrationParameters.maxPositionIterations=8;const floor=world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0,-.025,0));world.createCollider(RAPIER.ColliderDesc.cuboid(50,.025,50).setFriction(.7).setRestitution(.18),floor);
+// 透明な四方の壁でサイコロを画面中央のプレイエリアに閉じ込める。
+const ARENA=2.85,WALL_H=9,WALL_T=.18;
+for(const [x,z,hx,hz] of [[ARENA+WALL_T,0,WALL_T,ARENA+WALL_T],[ -ARENA-WALL_T,0,WALL_T,ARENA+WALL_T],[0,ARENA+WALL_T,ARENA+WALL_T,WALL_T],[0,-ARENA-WALL_T,ARENA+WALL_T,WALL_T]]){
+ const wall=world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(x,WALL_H/2,z));
+ world.createCollider(RAPIER.ColliderDesc.cuboid(hx,WALL_H/2,hz).setFriction(.6).setRestitution(.25),wall);
+}
+// rounded cube: 高密度メッシュの各頂点を丸めた直方体へ射影
+const SIZE=1.45,HALF=SIZE/2,RADIUS=.32;const base=new THREE.BoxGeometry(SIZE,SIZE,SIZE,18,18,18);const pos=base.attributes.position;const normal=base.attributes.normal;for(let i=0;i<pos.count;i++){const x=pos.getX(i),y=pos.getY(i),z=pos.getZ(i);const ix=THREE.MathUtils.clamp(x,-HALF+RADIUS,HALF-RADIUS),iy=THREE.MathUtils.clamp(y,-HALF+RADIUS,HALF-RADIUS),iz=THREE.MathUtils.clamp(z,-HALF+RADIUS,HALF-RADIUS);const v=new THREE.Vector3(x-ix,y-iy,z-iz).normalize();pos.setXYZ(i,ix+v.x*RADIUS,iy+v.y*RADIUS,iz+v.z*RADIUS);normal.setXYZ(i,v.x,v.y,v.z)}base.computeBoundingSphere(); // 明示的な頂点法線を維持し、角の面割れを防止
+const ivory=new THREE.MeshPhysicalMaterial({color:0xfff8e9,roughness:.115,metalness:0,ior:1.48,clearcoat:1,clearcoatRoughness:.055,envMapIntensity:2.25});const black=new THREE.MeshPhysicalMaterial({color:0x08090c,roughness:.23,clearcoat:.75,clearcoatRoughness:.15});const red=new THREE.MeshPhysicalMaterial({color:0xc50918,roughness:.24,clearcoat:.8});const lip=new THREE.MeshStandardMaterial({color:0xd2bda0,roughness:.4});
+const pipPatterns={1:[[0,0]],2:[[-1,-1],[1,1]],3:[[-1,-1],[0,0],[1,1]],4:[[-1,-1],[-1,1],[1,-1],[1,1]],5:[[-1,-1],[-1,1],[0,0],[1,-1],[1,1]],6:[[-1,-1],[-1,0],[-1,1],[1,-1],[1,0],[1,1]]};
+const faces=[{n:1,normal:[0,1,0]},{n:6,normal:[0,-1,0]},{n:2,normal:[0,0,1]},{n:5,normal:[0,0,-1]},{n:3,normal:[1,0,0]},{n:4,normal:[-1,0,0]}];
+function dieMesh(){const group=new THREE.Group();const cube=new THREE.Mesh(base,ivory);cube.castShadow=true;cube.receiveShadow=true;group.add(cube);for(const face of faces){const n=new THREE.Vector3(...face.normal);const rot=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1),n);for(const [u,v] of pipPatterns[face.n]){const x=u*.30,y=v*.30;const origin=new THREE.Vector3(x,y,HALF+.002).applyQuaternion(rot);const ring=new THREE.Mesh(new THREE.TorusGeometry(.137,.011,12,48),lip);ring.position.copy(origin);ring.quaternion.copy(rot);group.add(ring);const dot=new THREE.Mesh(new THREE.CircleGeometry(.128,64),face.n===1?red:black);dot.position.copy(new THREE.Vector3(x,y,HALF+.005).applyQuaternion(rot));dot.quaternion.copy(rot);group.add(dot)}}return group}
+// 近接時に濃く、浮き上がると淡く広がる接触影（スマホ向け軽量方式）
+const shadowCanvas=document.createElement('canvas');shadowCanvas.width=128;shadowCanvas.height=128;
+const sc=shadowCanvas.getContext('2d');const sg=sc.createRadialGradient(64,64,4,64,64,64);
+sg.addColorStop(0,'rgba(0,0,0,.90)');sg.addColorStop(.32,'rgba(0,0,0,.66)');sg.addColorStop(.7,'rgba(0,0,0,.11)');sg.addColorStop(1,'rgba(0,0,0,0)');sc.fillStyle=sg;sc.fillRect(0,0,128,128);
+const shadowTex=new THREE.CanvasTexture(shadowCanvas);
+let dice=[],count=1,rolling=false,history=[];const tmpV=new THREE.Vector3(),tmpQ=new THREE.Quaternion(),up=new THREE.Vector3(0,1,0);
+function clearDice(){for(const d of dice){world.removeRigidBody(d.body);scene.remove(d.mesh);scene.remove(d.contactShadow);d.contactShadow.material.dispose()}dice=[]}
+function spawn(n){clearDice();for(let i=0;i<n;i++){const mesh=dieMesh();scene.add(mesh);
+const contactShadow=new THREE.Mesh(new THREE.PlaneGeometry(2.65,2.65),new THREE.MeshBasicMaterial({map:shadowTex,transparent:true,depthWrite:false,opacity:.86,polygonOffset:true,polygonOffsetFactor:-1}));
+contactShadow.rotation.x=-Math.PI/2;contactShadow.position.y=.008;contactShadow.renderOrder=2;scene.add(contactShadow);const x=(i%3-1)*1.82+(Math.random()-.5)*.06,z=(Math.floor(i/3)-.5)*1.82+(Math.random()-.5)*.06;const body=world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(x,4.1+Math.floor(i/3)*.55,z).setLinearDamping(.42).setAngularDamping(.55).setCanSleep(true));world.createCollider(RAPIER.ColliderDesc.cuboid(HALF-.065,HALF-.065,HALF-.065).setDensity(1.15).setFriction(.48).setRestitution(.19),body);const q=new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random()*6,Math.random()*6,Math.random()*6));body.setRotation(q,true);body.setLinvel({x:(Math.random()-.5)*1.9,y:.2+Math.random()*.7,z:(Math.random()-.5)*1.9},true);body.setAngvel({x:(Math.random()-.5)*24,y:(Math.random()-.5)*24,z:(Math.random()-.5)*24},true);dice.push({mesh,body,contactShadow})}}
+function faceUp(body){const q=body.rotation();tmpQ.set(q.x,q.y,q.z,q.w);let best=1,bestDot=-Infinity;for(const f of faces){const dot=tmpV.set(...f.normal).applyQuaternion(tmpQ).dot(up);if(dot>bestDot){bestDot=dot;best=f.n}}return best}
+let rollStart=0,settle=0;function throwDice(){if(rolling)return;rolling=true;rollBtn.disabled=true;rollBtn.textContent='転がっています…';result.textContent='🎲 転がっています…';spawn(count);rollStart=performance.now();settle=0}
+function finish(){if(!rolling)return;rolling=false;for(const d of dice){d.body.setLinvel({x:0,y:0,z:0},true);d.body.setAngvel({x:0,y:0,z:0},true);d.body.sleep()}const values=dice.map(d=>faceUp(d.body));const sum=values.reduce((a,b)=>a+b,0);result.textContent=`出目：${values.join('・')}　｜　合計 ${sum}`;rollBtn.disabled=false;rollBtn.textContent='🎲 もう一度振る';history.unshift({values,sum});history=history.slice(0,30);document.querySelector('#log').innerHTML=history.map(h=>`<li>${h.values.join('・')}（合計 ${h.sum}）</li>`).join('')}
+function resize(){const w=innerWidth,h=innerHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.fov=w<h?53:42;camera.position.set(w<h?5.7:6.4,w<h?10.8:8.8,w<h?13.8:11.6);camera.lookAt(0,.55,0);camera.updateProjectionMatrix()}addEventListener('resize',resize);resize();
+let last=performance.now(),acc=0;function frame(now){requestAnimationFrame(frame);const dt=Math.min((now-last)/1000,.06);last=now;acc+=dt;while(acc>=1/120){world.timestep=1/120;world.step();acc-=1/120}for(const d of dice){const p=d.body.translation(),q=d.body.rotation();d.mesh.position.set(p.x,p.y,p.z);d.mesh.quaternion.set(q.x,q.y,q.z,q.w);
+const height=Math.max(0,p.y-HALF);d.contactShadow.position.x=p.x;d.contactShadow.position.z=p.z;
+const spread=1+Math.min(height,5)*.21;d.contactShadow.scale.set(spread,spread,1);
+d.contactShadow.material.opacity=Math.max(.08,.86-height*.13);
+}if(rolling){const elapsed=now-rollStart;const slow=dice.every(d=>{const v=d.body.linvel(),a=d.body.angvel();return d.body.isSleeping()||(Math.hypot(v.x,v.y,v.z)<.42&&Math.hypot(a.x,a.y,a.z)<.65)});settle=slow?settle+dt:0;if((elapsed>1400&&settle>.55)||elapsed>6500)finish()}renderer.render(scene,camera)}requestAnimationFrame(frame);
+document.querySelector('#minus').onclick=()=>{if(rolling)return;count=Math.max(1,count-1);document.querySelector('#count').textContent=count};document.querySelector('#plus').onclick=()=>{if(rolling)return;count=Math.min(6,count+1);document.querySelector('#count').textContent=count};document.querySelector('#historyBtn').onclick=()=>{const el=document.querySelector('#history');el.style.display=el.style.display==='block'?'none':'block'};rollBtn.onclick=throwDice;rollBtn.disabled=false;// 初期サイコロを静置
+spawn(1);for(const d of dice){d.body.setTranslation({x:0,y:.79,z:0},true);d.body.setLinvel({x:0,y:0,z:0},true);d.body.setAngvel({x:0,y:0,z:0},true);d.body.setRotation({x:0,y:0,z:0,w:1},true)}
+}catch(e){fail(e)}
+</script></body></html>
